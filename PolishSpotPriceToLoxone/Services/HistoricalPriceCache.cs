@@ -15,6 +15,7 @@ public sealed class HistoricalPriceCache
     private readonly TgeRdnClient _client;
     private readonly PriceOptions _options;
     private readonly ILogger<HistoricalPriceCache> _logger;
+    private readonly string _cacheFile;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private Dictionary<string, IReadOnlyList<HourlyPrice>> _pricesByDate = new(StringComparer.Ordinal);
 
@@ -23,6 +24,7 @@ public sealed class HistoricalPriceCache
         _client = client;
         _options = options.Value;
         _logger = logger;
+        _cacheFile = CacheFilePaths.WritablePath(_options.HistoricalCacheFile);
         LoadFromDisk();
     }
 
@@ -42,10 +44,18 @@ public sealed class HistoricalPriceCache
                 return cached;
             }
 
-            var prices = await _client.GetHistoricalHourlyPricesAsync(date, cancellationToken);
-            _pricesByDate[key] = prices;
-            SaveToDisk();
-            return prices;
+            try
+            {
+                var prices = await _client.GetHistoricalHourlyPricesAsync(date, cancellationToken);
+                _pricesByDate[key] = prices;
+                SaveToDisk();
+                return prices;
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(ex, "Could not fetch historical prices for {Date}.", key);
+                return Array.Empty<HourlyPrice>();
+            }
         }
         finally
         {
@@ -153,32 +163,41 @@ public sealed class HistoricalPriceCache
 
     private void LoadFromDisk()
     {
-        if (!File.Exists(_options.HistoricalCacheFile))
+        foreach (var cacheFile in CacheFilePaths.ReadCandidates(_options.HistoricalCacheFile, _cacheFile)
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .Reverse()
+                     .Where(File.Exists))
         {
-            return;
-        }
+            try
+            {
+                var json = File.ReadAllText(cacheFile);
+                var loaded = JsonSerializer.Deserialize<Dictionary<string, IReadOnlyList<HourlyPrice>>>(json, JsonOptions);
+                if (loaded is null)
+                {
+                    continue;
+                }
 
-        try
-        {
-            var json = File.ReadAllText(_options.HistoricalCacheFile);
-            _pricesByDate = JsonSerializer.Deserialize<Dictionary<string, IReadOnlyList<HourlyPrice>>>(json, JsonOptions)
-                            ?? new Dictionary<string, IReadOnlyList<HourlyPrice>>(StringComparer.Ordinal);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not read historical price cache file.");
+                foreach (var item in loaded)
+                {
+                    _pricesByDate[item.Key] = item.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read historical price cache file {CacheFile}.", cacheFile);
+            }
         }
     }
 
     private void SaveToDisk()
     {
-        var directory = Path.GetDirectoryName(_options.HistoricalCacheFile);
+        var directory = Path.GetDirectoryName(_cacheFile);
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(_options.HistoricalCacheFile, JsonSerializer.Serialize(_pricesByDate, JsonOptions));
+        File.WriteAllText(_cacheFile, JsonSerializer.Serialize(_pricesByDate, JsonOptions));
     }
 }
 

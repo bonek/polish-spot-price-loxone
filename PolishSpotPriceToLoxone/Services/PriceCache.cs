@@ -15,6 +15,7 @@ public sealed class PriceCache
     private readonly TgeRdnClient _client;
     private readonly PriceOptions _options;
     private readonly ILogger<PriceCache> _logger;
+    private readonly string _cacheFile;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private PriceSnapshot _snapshot = PriceSnapshot.Empty();
 
@@ -23,6 +24,7 @@ public sealed class PriceCache
         _client = client;
         _options = options.Value;
         _logger = logger;
+        _cacheFile = CacheFilePaths.WritablePath(_options.CacheFile);
         LoadFromDisk();
         _snapshot = _snapshot with { NextAttemptUtc = CalculateNextAttempt(DateTimeOffset.UtcNow) };
     }
@@ -161,14 +163,16 @@ public sealed class PriceCache
 
     private void LoadFromDisk()
     {
-        if (!File.Exists(_options.CacheFile))
+        var cacheFile = CacheFilePaths.ReadCandidates(_options.CacheFile, _cacheFile)
+            .FirstOrDefault(File.Exists);
+        if (cacheFile is null)
         {
             return;
         }
 
         try
         {
-            var json = File.ReadAllText(_options.CacheFile);
+            var json = File.ReadAllText(cacheFile);
             _snapshot = JsonSerializer.Deserialize<PriceSnapshot>(json, JsonOptions) ?? PriceSnapshot.Empty();
         }
         catch (Exception ex)
@@ -179,12 +183,12 @@ public sealed class PriceCache
 
     private void SaveToDisk()
     {
-        var directory = Path.GetDirectoryName(_options.CacheFile);
+        var directory = Path.GetDirectoryName(_cacheFile);
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(_options.CacheFile, JsonSerializer.Serialize(_snapshot, JsonOptions));
+        File.WriteAllText(_cacheFile, JsonSerializer.Serialize(_snapshot, JsonOptions));
     }
 }

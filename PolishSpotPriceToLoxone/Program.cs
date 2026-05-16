@@ -22,7 +22,9 @@ builder.Services.AddHostedService<HistoricalPriceRefreshWorker>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => Results.Redirect("/health"));
+app.MapGet("/", () => Results.Text(GetDashboardHtml(), "text/html; charset=utf-8"));
+
+app.MapGet("/dashboard", () => Results.Text(GetDashboardHtml(), "text/html; charset=utf-8"));
 
 app.MapGet("/docs", () => Results.Redirect("/loxone/docs"));
 
@@ -341,6 +343,277 @@ static decimal ConvertUnit(decimal plnPerMwh, string? unit)
     return string.Equals(unit, "mwh", StringComparison.OrdinalIgnoreCase)
         ? plnPerMwh
         : Math.Round(plnPerMwh / 1000m, 5, MidpointRounding.AwayFromZero);
+}
+
+static string GetDashboardHtml()
+{
+    return """
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ceny energii RDN</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #16191d;
+      --muted: #5f6875;
+      --line: #d9dee7;
+      --accent: #176b87;
+      --low: #e8f6ef;
+      --mid: #fff7df;
+      --high: #fdecec;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    header { background: #ffffff; border-bottom: 1px solid var(--line); }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 70px; }
+    h1 { font-size: 22px; line-height: 1.2; margin: 0; font-weight: 750; letter-spacing: 0; }
+    nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a { color: var(--accent); text-decoration: none; font-weight: 650; font-size: 14px; }
+    main { padding: 22px 0 40px; }
+    .toolbar { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 10px; align-items: end; margin-bottom: 18px; }
+    label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    select, input, button {
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text);
+      padding: 0 10px;
+      font: inherit;
+      min-width: 0;
+    }
+    button { background: var(--accent); color: #ffffff; border-color: var(--accent); font-weight: 750; cursor: pointer; }
+    button.secondary { background: #ffffff; color: var(--accent); }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin: 0 0 18px; }
+    .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 5px; font-size: 22px; letter-spacing: 0; }
+    .table-shell { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 720px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { background: #fbfcfd; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0; }
+    tr:last-child td { border-bottom: 0; }
+    tr.low td.price { background: var(--low); }
+    tr.mid td.price { background: var(--mid); }
+    tr.high td.price { background: var(--high); }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .status { min-height: 24px; color: var(--muted); margin: 10px 0 0; font-size: 14px; }
+    .error { color: #b42318; }
+    .url { display: block; margin-top: 12px; color: var(--muted); overflow-wrap: anywhere; font-size: 13px; }
+
+    @media (max-width: 860px) {
+      .topbar { align-items: flex-start; flex-direction: column; padding: 16px 0; }
+      .toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 520px) {
+      .wrap { width: min(100% - 20px, 1180px); }
+      .toolbar, .summary { grid-template-columns: 1fr; }
+      h1 { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap topbar">
+      <h1>Ceny energii RDN</h1>
+      <nav>
+        <a href="/loxone/docs">Dokumentacja</a>
+        <a href="/loxone/tariffs">Taryfy JSON</a>
+        <a href="/health">Health</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="filters" class="toolbar">
+      <label>Data
+        <input id="date" name="date" type="date">
+      </label>
+      <label>Dystrybutor
+        <select id="distributor" name="distributor"></select>
+      </label>
+      <label>Taryfa
+        <select id="tariff" name="tariff"></select>
+      </label>
+      <label>Sprzedawca
+        <select id="seller" name="seller">
+          <option value="">Bez marży</option>
+          <option value="pstryk">Pstryk</option>
+        </select>
+      </label>
+      <label>Jednostka
+        <select id="unit" name="unit">
+          <option value="kwh">zł/kWh</option>
+          <option value="mwh">zł/MWh</option>
+        </select>
+      </label>
+      <button type="submit">Odśwież</button>
+    </form>
+
+    <section class="summary" aria-label="Podsumowanie">
+      <div class="metric"><span>Minimum</span><strong id="min">-</strong></div>
+      <div class="metric"><span>Średnia</span><strong id="avg">-</strong></div>
+      <div class="metric"><span>Maksimum</span><strong id="max">-</strong></div>
+      <div class="metric"><span>Dostępne godziny</span><strong id="count">-</strong></div>
+    </section>
+
+    <div class="table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>Godzina</th>
+            <th>Klucz</th>
+            <th>Cena</th>
+            <th>Poziom</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p id="status" class="status"></p>
+    <code id="apiUrl" class="url"></code>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const distributor = $("distributor");
+    const tariff = $("tariff");
+    const rows = $("rows");
+    let tariffs = {};
+
+    function today() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+    }
+
+    function fmt(value) {
+      return value === null || value === undefined ? "-" : Number(value).toFixed(2);
+    }
+
+    function setMetric(id, value, suffix) {
+      $(id).textContent = value === null ? "-" : `${fmt(value)} ${suffix}`;
+    }
+
+    function fillDistributors() {
+      distributor.innerHTML = '<option value="">TGE bez dystrybucji</option>';
+      Object.keys(tariffs).forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        distributor.appendChild(option);
+      });
+      distributor.value = "tauron";
+      fillTariffs();
+      tariff.value = "g12w";
+    }
+
+    function fillTariffs() {
+      const selected = distributor.value;
+      tariff.innerHTML = '<option value="">Bez taryfy</option>';
+      (tariffs[selected] || []).forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        tariff.appendChild(option);
+      });
+      tariff.disabled = !selected;
+    }
+
+    function buildUrl() {
+      const params = new URLSearchParams();
+      const date = $("date").value;
+      if (date) params.set("date", date);
+      if (distributor.value) params.set("distributor", distributor.value);
+      if (tariff.value) params.set("tariff", tariff.value);
+      if ($("seller").value) params.set("seller", $("seller").value);
+      if ($("unit").value) params.set("unit", $("unit").value);
+      return `/loxone/prices?${params.toString()}`;
+    }
+
+    function level(value, min, max) {
+      if (value === null || value === undefined) return "";
+      const span = max - min;
+      if (span <= 0) return "mid";
+      const position = (value - min) / span;
+      if (position <= 0.33) return "low";
+      if (position >= 0.67) return "high";
+      return "mid";
+    }
+
+    async function loadPrices(event) {
+      if (event) event.preventDefault();
+      $("status").textContent = "Ładowanie...";
+      $("status").className = "status";
+      const url = buildUrl();
+      $("apiUrl").textContent = url;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const items = Object.entries(data).map(([key, value], index) => ({ key, value, index }));
+        const values = items.map((item) => item.value).filter((value) => value !== null && value !== undefined);
+        const min = values.length ? Math.min(...values) : null;
+        const max = values.length ? Math.max(...values) : null;
+        const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+        const unit = $("unit").value === "mwh" ? "zł/MWh" : "zł/kWh";
+
+        setMetric("min", min, unit);
+        setMetric("avg", avg, unit);
+        setMetric("max", max, unit);
+        $("count").textContent = `${values.length}/24`;
+
+        rows.innerHTML = "";
+        items.forEach((item) => {
+          const tr = document.createElement("tr");
+          const cls = level(item.value, min ?? 0, max ?? 0);
+          if (cls) tr.className = cls;
+          const hour = item.index.toString().padStart(2, "0") + ":00";
+          const label = cls === "low" ? "taniej" : cls === "high" ? "drożej" : cls === "średnio" ? "średnio" : "średnio";
+          tr.innerHTML = `
+            <td class="mono">${hour}</td>
+            <td class="mono">${item.key}</td>
+            <td class="price mono">${fmt(item.value)} ${unit}</td>
+            <td>${item.value === null || item.value === undefined ? "brak" : label}</td>
+          `;
+          rows.appendChild(tr);
+        });
+        $("status").textContent = "Zaktualizowano.";
+      } catch (error) {
+        rows.innerHTML = "";
+        ["min", "avg", "max"].forEach((id) => $(id).textContent = "-");
+        $("count").textContent = "-";
+        $("status").textContent = error.message || "Nie udało się pobrać danych.";
+        $("status").className = "status error";
+      }
+    }
+
+    async function start() {
+      $("date").value = today();
+      const response = await fetch("/loxone/tariffs");
+      tariffs = await response.json();
+      fillDistributors();
+      distributor.addEventListener("change", fillTariffs);
+      $("filters").addEventListener("submit", loadPrices);
+      await loadPrices();
+    }
+
+    start();
+  </script>
+</body>
+</html>
+""";
 }
 
 static string GetLoxoneDocsHtml()
