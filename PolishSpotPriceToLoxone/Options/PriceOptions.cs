@@ -5,7 +5,9 @@ public sealed class PriceOptions
     public const string SectionName = "Prices";
 
     public string TgeUrl { get; init; } = "https://tge.pl/energia-elektryczna-rdn";
+    public string HistoricalTgeApiUrl { get; init; } = "https://datahub.gkpge.pl/api/tge/quote";
     public string CacheFile { get; init; } = "data/prices-cache.json";
+    public string HistoricalCacheFile { get; init; } = "data/historical-prices-cache.json";
     public string DefaultUnit { get; init; } = "kwh";
     public string MarketColumn { get; init; } = "fixing1";
     public int RefreshStartHour { get; init; } = 10;

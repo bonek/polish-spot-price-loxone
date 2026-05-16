@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using PolishSpotPriceToLoxone.Models;
@@ -21,6 +22,42 @@ public sealed partial class TgeRdnClient(HttpClient httpClient, IOptions<PriceOp
         }
 
         return allPrices
+            .OrderBy(price => price.HourLocal)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<HourlyPrice>> GetHistoricalHourlyPricesAsync(DateOnly deliveryDate, CancellationToken cancellationToken)
+    {
+        var dateFrom = Uri.EscapeDataString($"{deliveryDate:yyyy-MM-dd} 00:00:00");
+        var dateTo = Uri.EscapeDataString($"{deliveryDate.AddDays(1):yyyy-MM-dd} 00:00:00");
+        var url = $"{_options.HistoricalTgeApiUrl}?source=TGE&contract=Fix_1&date_from={dateFrom}&date_to={dateTo}&limit=100";
+
+        using var stream = await httpClient.GetStreamAsync(url, cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        var values = document.RootElement;
+        if (document.RootElement.ValueKind == JsonValueKind.Object &&
+            (!document.RootElement.TryGetProperty("value", out values) || values.ValueKind != JsonValueKind.Array))
+        {
+            return [];
+        }
+
+        if (values.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var prices = new List<HourlyPrice>();
+        foreach (var item in values.EnumerateArray())
+        {
+            var price = TryMapHistoricalHourly(item, deliveryDate);
+            if (price is not null)
+            {
+                prices.Add(price);
+            }
+        }
+
+        return prices
             .OrderBy(price => price.HourLocal)
             .ToArray();
     }
@@ -149,6 +186,33 @@ public sealed partial class TgeRdnClient(HttpClient httpClient, IOptions<PriceOp
             var hourStart = date.AddHours(tgeHour - 1);
             yield return new HourlyPrice(new DateTimeOffset(hourStart, WarsawOffsetFor(hourStart)), price, DateTime.Now);
         }
+    }
+
+    private static HourlyPrice? TryMapHistoricalHourly(JsonElement item, DateOnly deliveryDate)
+    {
+        if (!item.TryGetProperty("date_time", out var dateTimeElement) ||
+            !DateTime.TryParseExact(dateTimeElement.GetString(), "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hourStart) ||
+            DateOnly.FromDateTime(hourStart) != deliveryDate ||
+            !item.TryGetProperty("attributes", out var attributes) ||
+            attributes.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var attribute in attributes.EnumerateArray())
+        {
+            if (!attribute.TryGetProperty("name", out var name) ||
+                !string.Equals(name.GetString(), "price", StringComparison.OrdinalIgnoreCase) ||
+                !attribute.TryGetProperty("value", out var value) ||
+                !TryParsePlnPerMwh(value.GetString() ?? string.Empty, out var price))
+            {
+                continue;
+            }
+
+            return new HourlyPrice(new DateTimeOffset(hourStart, WarsawOffsetFor(hourStart)), price, DateTime.Now);
+        }
+
+        return null;
     }
 
     private static bool TryGetHourStart(string value, out int hour)

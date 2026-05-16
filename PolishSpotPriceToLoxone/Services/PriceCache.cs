@@ -46,6 +46,11 @@ public sealed class PriceCache
 
     public PriceSnapshot GetSnapshot() => _snapshot;
 
+    public bool HasCurrentHourPrice()
+    {
+        return HasPriceForHour(DateTimeOffset.UtcNow.ToOffset(WarsawOffset()));
+    }
+
     public bool TryGetPrice(DateTimeOffset targetHour, string? unit, out decimal price)
     {
         var hourStart = new DateTimeOffset(targetHour.Year, targetHour.Month, targetHour.Day, targetHour.Hour, 0, 0, targetHour.Offset);
@@ -63,7 +68,8 @@ public sealed class PriceCache
     public async Task EnsureFreshAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        if (!_snapshot.HasAnyPrices || _snapshot.NextAttemptUtc <= now)
+        var nowLocal = now.ToOffset(WarsawOffset());
+        if (!_snapshot.HasAnyPrices || _snapshot.NextAttemptUtc <= now || !HasPriceForHour(nowLocal))
         {
             await RefreshAsync(force: false, cancellationToken);
         }
@@ -75,12 +81,12 @@ public sealed class PriceCache
         try
         {
             var nowUtc = DateTimeOffset.UtcNow;
-            if (!force && _snapshot.HasAnyPrices && _snapshot.NextAttemptUtc > nowUtc)
+            var nowLocal = nowUtc.ToOffset(WarsawOffset());
+            if (!force && _snapshot.HasAnyPrices && _snapshot.NextAttemptUtc > nowUtc && HasPriceForHour(nowLocal))
             {
                 return new RefreshResult(false, "refresh-not-due", _snapshot.PriceCount, _snapshot.NextAttemptUtc);
             }
 
-            var nowLocal = nowUtc.ToOffset(WarsawOffset());
             var dates = new[] { nowLocal.Date, nowLocal.Date.AddDays(1) };
 
             try
@@ -131,6 +137,12 @@ public sealed class PriceCache
         return effectiveUnit.Equals("mwh", StringComparison.OrdinalIgnoreCase)
             ? plnPerMwh
             : Math.Round(plnPerMwh / 1000m, 5, MidpointRounding.AwayFromZero);
+    }
+
+    private bool HasPriceForHour(DateTimeOffset targetHour)
+    {
+        var hourStart = new DateTimeOffset(targetHour.Year, targetHour.Month, targetHour.Day, targetHour.Hour, 0, 0, targetHour.Offset);
+        return _snapshot.Prices.Any(price => price.HourLocal == hourStart);
     }
 
     private DateTimeOffset CalculateNextAttempt(DateTimeOffset fromUtc)
