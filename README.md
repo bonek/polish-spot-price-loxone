@@ -1,21 +1,21 @@
 # polish-spot-price-loxone
 
-Proste API pod Loxone, które pobiera ceny z TGE RDN (Polska) i wystawia je jako:
+A simple API for Loxone that fetches Polish day-ahead spot prices from TGE RDN and exposes them as:
 
-- jeden endpoint JSON `h0..h23`
-- opcjonalnie pojedyncze endpointy `h0`, `h1`, ..., `h23`
+- one JSON endpoint with `h0..h23`
+- optional single-value endpoints `h0`, `h1`, ..., `h23`
 
-Serwis trzyma dane w cache i odświeża je automatycznie po publikacji.
+The service keeps data in a local cache and refreshes it automatically after publication.
 
-## Endpointy
+## Endpoints
 
-Zakładając, że aplikacja działa pod `https://twoja-apka.azurewebsites.net`:
+Assuming the app is running at `https://your-app.azurewebsites.net`:
 
 - `GET /health`  
-  status aplikacji i cache
+  app and cache status
 
 - `GET /loxone/prices`  
-  JSON tylko z polami `h0..h23`, np.:
+  JSON with only `h0..h23`, for example:
   ```json
   {
     "h0": 0.42111,
@@ -25,30 +25,30 @@ Zakładając, że aplikacja działa pod `https://twoja-apka.azurewebsites.net`:
   ```
 
 - `GET /loxone/h0` ... `GET /loxone/h23`  
-  pojedyncza liczba `text/plain`
+  single `text/plain` numeric value
 
 - `POST /admin/refresh`  
-  ręczne wymuszenie odświeżenia cache
+  force cache refresh manually
 
-## Jak czytać `h0..h23`
+## Meaning of `h0..h23`
 
-- `h0` = cena dla bieżącej godziny
-- `h1` = cena za 1 godzinę
-- `h5` = cena za 5 godzin
-- `h23` = cena za 23 godziny
+- `h0` = current hour price
+- `h1` = price in 1 hour
+- `h5` = price in 5 hours
+- `h23` = price in 23 hours
 
-Wartości są w `zł/kWh`.
+Values are returned in `PLN/kWh`.
 
-## Źródło danych
+## Data source
 
 TGE RDN:
 
-- strona: `https://tge.pl/energia-elektryczna-rdn`
-- parser używa `dateShow=DD-MM-YYYY` i czyta dane godzinowe
+- page: `https://tge.pl/energia-elektryczna-rdn`
+- parser uses `dateShow=DD-MM-YYYY` and reads hourly data
 
-## Konfiguracja (`appsettings.json`)
+## Configuration (`appsettings.json`)
 
-Sekcja:
+Section:
 
 ```json
 "Prices": {
@@ -64,34 +64,115 @@ Sekcja:
 }
 ```
 
-## Szybki start lokalnie
+## Local quick start
 
 ```bash
 dotnet build
 dotnet run --project PolishSpotPriceToLoxone
 ```
 
-Domyślny lokalny adres (z launch settings):  
+Default local URL (from launch settings):  
 `http://localhost:5154`
 
-Przykład:
+Example:
 
 `http://localhost:5154/loxone/prices`
 
-## Deploy na Azure (Web App Linux F1)
+## Docker deployment
 
-Przykład (CLI):
+The repository includes a production `Dockerfile` and `docker-compose.yml`.
+The image builds the React dashboard first, publishes the .NET API, then serves everything from one ASP.NET Core container.
+
+### Build and run with Docker Compose
 
 ```bash
-az webapp up \
-  --name <unikalna-nazwa-appki> \
-  --resource-group <resource-group> \
-  --plan <app-service-plan> \
-  --location westeurope \
-  --runtime "DOTNETCORE:10.0" \
-  --os-type Linux
+docker compose up -d --build
 ```
 
-Po deployu ustaw URL w Loxone na:
+Default local URL:
 
-`https://<unikalna-nazwa-appki>.azurewebsites.net/loxone/prices`
+- `http://localhost:5154/`
+- `http://localhost:5154/loxone/docs`
+- `http://localhost:5154/loxone/prices`
+
+The compose file stores price cache files in a named volume mounted at `/app/data`.
+
+### Optional SQL cache
+
+For Azure SQL or another SQL Server, set:
+
+```yaml
+environment:
+  ConnectionStrings__PricesSql: "Server=tcp:your-server.database.windows.net,1433;Initial Catalog=your-db;User ID=...;Password=...;Encrypt=True;TrustServerCertificate=False;"
+```
+
+Without `ConnectionStrings__PricesSql`, the app runs normally with the local JSON cache.
+
+### Build only
+
+```bash
+docker build -t polish-spot-loxone:latest .
+docker run -p 5154:8080 -v polish-spot-price-data:/app/data polish-spot-loxone:latest
+```
+
+## Azure deployment
+
+You can deploy to your own Azure App Service with the included PowerShell script.
+
+Files:
+
+- `scripts/deploy.azure.example.json` - example config
+- `scripts/Deploy-AzureAppService.ps1` - deployment script
+
+### 1. Prepare config
+
+Copy:
+
+```powershell
+Copy-Item .\scripts\deploy.azure.example.json .\scripts\deploy.azure.json
+```
+
+Then fill in:
+
+- `subscriptionId` - your Azure subscription
+- `resourceGroup` - resource group name
+- `location` - for example `westeurope`
+- `planName` - App Service plan name
+- `appName` - globally unique Web App name
+- `sku` - for example `F1`
+- `runtime` - default is `DOTNETCORE:10.0`
+- `connectionStrings.PricesSql` - optional Azure SQL connection string
+- `appSettings` - optional extra app settings
+
+If `PricesSql` is empty, the app still works and uses file cache.
+
+### 2. Run deploy
+
+```powershell
+az login
+.\scripts\Deploy-AzureAppService.ps1
+```
+
+Or with a custom config path:
+
+```powershell
+.\scripts\Deploy-AzureAppService.ps1 -ConfigPath .\scripts\deploy.azure.json
+```
+
+### 3. What the script does
+
+- creates the resource group if missing
+- creates the Linux App Service plan if missing
+- creates the Web App if missing
+- sets `https-only`
+- optionally sets app settings
+- optionally sets the `PricesSql` Azure SQL connection string
+- publishes the app
+- packs a zip deployment
+- deploys it to Azure Web App
+
+After deployment, use:
+
+- `https://<app-name>.azurewebsites.net/`
+- `https://<app-name>.azurewebsites.net/loxone/docs`
+- `https://<app-name>.azurewebsites.net/loxone/prices`

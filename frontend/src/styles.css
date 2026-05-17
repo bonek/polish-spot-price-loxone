@@ -1,0 +1,143 @@
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(22, 163, 74, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.10), transparent 26%),
+    linear-gradient(180deg, #f5f7fb 0%, #edf2f7 100%);
+  color: #17202b;
+}
+
+.app-shell {
+  --mantine-color-body: transparent;
+}
+
+.app-header {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(151, 164, 182, 0.2);
+}
+
+.app-header-inner {
+  min-height: 96px;
+  padding: 14px 0;
+  display: flex;
+  align-items: center;
+}
+
+.brand-icon,
+.chart-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.18);
+}
+
+.brand-title {
+  letter-spacing: 0;
+}
+
+.app-main {
+  padding-top: 24px;
+  padding-bottom: 40px;
+}
+
+.filter-card,
+.metric-card,
+.table-card,
+.api-card {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(205, 214, 226, 0.65);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06);
+}
+
+.chart-card {
+  color: #f4f7fb;
+  background:
+    linear-gradient(180deg, rgba(25, 30, 42, 0.98), rgba(20, 24, 33, 0.98)),
+    linear-gradient(135deg, rgba(29, 78, 216, 0.2), transparent 55%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+}
+
+.chart-kicker {
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f4f7fb;
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.day-band {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  color: #cfd8e6;
+  font-size: 0.86rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.day-band-left {
+  left: 56px;
+}
+
+.day-band-right {
+  left: calc(50% + 10px);
+}
+
+.metric-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #607086;
+  font-weight: 800;
+}
+
+.metric-value {
+  font-size: clamp(1.7rem, 2.2vw, 2.2rem);
+  line-height: 1;
+  margin: 10px 0 6px;
+  font-weight: 800;
+  color: #101828;
+}
+
+.mantine-Table-th {
+  color: #607086;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mantine-Code-root {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .app-header-inner {
+    min-height: 118px;
+  }
+
+  .app-main {
+    padding-top: 16px;
+  }
+
+  .day-band-left {
+    left: 48px;
+  }
+
+  .day-band-right {
+    left: calc(50% + 6px);
+  }
+}

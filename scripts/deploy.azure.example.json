@@ -1,0 +1,15 @@
+{
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "resourceGroup": "rg-polish-spot-loxone",
+  "location": "westeurope",
+  "planName": "asp-polish-spot-loxone",
+  "appName": "your-unique-loxone-app-name",
+  "sku": "F1",
+  "runtime": "DOTNETCORE:10.0",
+  "projectPath": "PolishSpotPriceToLoxone/PolishSpotPriceToLoxone.csproj",
+  "connectionStrings": {
+    "PricesSql": ""
+  },
+  "appSettings": {
+  }
+}

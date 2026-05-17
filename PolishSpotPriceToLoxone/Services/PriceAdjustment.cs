@@ -87,6 +87,13 @@ public sealed record PriceAdjustment(bool Pstryk, string? Distributor, string? T
             hasDistributor = true;
         }
 
+        if (hasDistributor && !hasTariff)
+        {
+            adjustment = Empty;
+            error = "tariff is required when distributor is provided";
+            return false;
+        }
+
         var canonicalDistributor = (string?)null;
         if (hasDistributor && !DistributorAliases.TryGetValue(effectiveDistributor!, out canonicalDistributor))
         {
@@ -96,11 +103,6 @@ public sealed record PriceAdjustment(bool Pstryk, string? Distributor, string? T
         }
 
         var effectiveTariff = string.IsNullOrWhiteSpace(tariff) ? null : tariff.Trim().ToLowerInvariant();
-        if (canonicalDistributor is not null && effectiveTariff is null)
-        {
-            effectiveTariff = "g11";
-        }
-
         if (canonicalDistributor is not null && effectiveTariff is not null)
         {
             var tariffs = Distributors[canonicalDistributor];

@@ -2,15 +2,20 @@
 **/bin/
 **/obj/
 publish/
+publish*/
+.deploy/
+**/dist/
 *.zip
 
 # IDE/editor
 .idea/
 *.sln.DotSettings.user
 *.user
+node_modules/
 
 # Local environment/artifacts
 .azure/
+scripts/deploy.azure.json
 **/data/prices-cache.json
 
 # OS noise

@@ -4,11 +4,32 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <SpaRoot>..\frontend\</SpaRoot>
+        <DefaultItemExcludes>$(DefaultItemExcludes);$(SpaRoot)node_modules\**;$(SpaRoot)dist\**</DefaultItemExcludes>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.8" />
     </ItemGroup>
+
+    <ItemGroup>
+      <Content Remove="$(SpaRoot)**" />
+      <None Remove="$(SpaRoot)**" />
+      <None Include="$(SpaRoot)**" Exclude="$(SpaRoot)node_modules\**;$(SpaRoot)dist\**" />
+    </ItemGroup>
+
+    <Target Name="PublishRunFrontend" AfterTargets="ComputeFilesToPublish" Condition="'$(BuildFrontend)' != 'false' And Exists('$(SpaRoot)package.json')">
+      <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
+      <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+
+      <ItemGroup>
+        <FrontendDistFiles Include="$(SpaRoot)dist\**" />
+        <ResolvedFileToPublish Include="@(FrontendDistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+          <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+          <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+          <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+        </ResolvedFileToPublish>
+      </ItemGroup>
+    </Target>
 
 </Project>

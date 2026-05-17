@@ -23,9 +23,14 @@ builder.Services.AddHostedService<HistoricalPriceRefreshWorker>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => Results.Text(GetDashboardHtml(), "text/html; charset=utf-8"));
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
-app.MapGet("/dashboard", () => Results.Text(GetDashboardHtml(), "text/html; charset=utf-8"));
+app.MapGet("/", DashboardFile);
+
+app.MapGet("/index.html", DashboardFile);
+
+app.MapGet("/dashboard", DashboardFile);
 
 app.MapGet("/docs", () => Results.Redirect("/loxone/docs"));
 
@@ -250,6 +255,8 @@ app.MapPost("/admin/historical/refresh", async (
     return Results.Ok(result);
 });
 
+app.MapFallback(DashboardFile);
+
 app.Run();
 
 static IResult LoxoneNumber(decimal price)
@@ -346,6 +353,28 @@ static decimal ConvertUnit(decimal plnPerMwh, string? unit)
         : Math.Round(plnPerMwh / 1000m, 5, MidpointRounding.AwayFromZero);
 }
 
+static IResult DashboardFile(IWebHostEnvironment environment)
+{
+    var candidates = new[]
+    {
+        Path.Combine(environment.WebRootPath ?? string.Empty, "index.html"),
+        Path.Combine(environment.ContentRootPath, "wwwroot", "index.html"),
+        Path.Combine(environment.ContentRootPath, "index.html"),
+        Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html"),
+        Path.Combine(AppContext.BaseDirectory, "index.html")
+    }
+    .Where(path => !string.IsNullOrWhiteSpace(path))
+    .Select(Path.GetFullPath)
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+    var indexPath = candidates.FirstOrDefault(File.Exists);
+    return indexPath is null
+        ? Results.NotFound(new { error = "dashboard index.html not found", checkedPaths = candidates })
+        : TypedResults.PhysicalFile(indexPath, "text/html; charset=utf-8");
+}
+
+#pragma warning disable CS8321
 static string GetDashboardHtml()
 {
     return """
@@ -617,6 +646,7 @@ static string GetDashboardHtml()
 """;
 }
 
+#pragma warning restore CS8321
 static string GetLoxoneDocsHtml()
 {
     return """
@@ -728,6 +758,19 @@ koszt_brutto = koszt_netto * 1.23</pre>
     <tr><td><code>GET /loxone/tariffs</code></td><td>Lista obslugiwanych dystrybutorow i taryf.</td></tr>
     <tr><td><code>GET /health</code></td><td>Status aplikacji i cache.</td></tr>
   </table>
+  <h2>Deploy na wlasny Azure App Service</h2>
+  <p>W repo jest gotowy skrypt, ktory pozwala wdrozyc aplikacje na wlasny Azure po uzupelnieniu jednego pliku konfiguracyjnego.</p>
+  <table>
+    <tr><th>Plik</th><th>Rola</th></tr>
+    <tr><td><code>scripts/deploy.azure.example.json</code></td><td>Przykladowa konfiguracja do skopiowania i uzupelnienia.</td></tr>
+    <tr><td><code>scripts/Deploy-AzureAppService.ps1</code></td><td>Skrypt publikacji i deployu do Azure App Service.</td></tr>
+  </table>
+  <pre>Copy-Item .\scripts\deploy.azure.example.json .\scripts\deploy.azure.json
+az login
+.\scripts\Deploy-AzureAppService.ps1</pre>
+  <p>W pliku <code>deploy.azure.json</code> uzupelnij: <code>subscriptionId</code>, <code>resourceGroup</code>, <code>location</code>, <code>planName</code>, <code>appName</code>, <code>sku</code> i opcjonalnie <code>connectionStrings.PricesSql</code> oraz <code>appSettings</code>.</p>
+  <p>Skrypt sam tworzy resource group, Linux App Service Plan i Web App, jesli ich jeszcze nie ma. Potem publikuje aplikacje, robi zip deploy i wypisuje gotowe adresy URL.</p>
+  <p>Jesli <code>PricesSql</code> zostawisz puste, aplikacja dalej dziala na plikowym cache. Jesli podasz Azure SQL connection string, skrypt ustawi go w App Service jako <code>PricesSql</code>.</p>
 </main>
 </body>
 </html>

@@ -1,0 +1,20 @@
+services:
+  polish-spot-loxone:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: polish-spot-loxone:latest
+    ports:
+      - "5154:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Prices__CacheFile: /app/data/prices-cache.json
+      Prices__HistoricalCacheFile: /app/data/historical-prices-cache.json
+      # Optional:
+      # ConnectionStrings__PricesSql: "Server=tcp:your-server.database.windows.net,1433;Initial Catalog=your-db;User ID=...;Password=...;Encrypt=True;TrustServerCertificate=False;"
+    volumes:
+      - polish-spot-price-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  polish-spot-price-data:
