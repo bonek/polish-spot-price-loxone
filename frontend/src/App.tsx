@@ -427,20 +427,22 @@ export default function App() {
                     />
                     <Tooltip
                       cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                      contentStyle={{
-                        background: "#11151d",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        borderRadius: "12px",
-                        color: "#f4f6fb"
-                      }}
-                      labelStyle={{ color: "#f4f6fb", fontWeight: 700 }}
-                      itemStyle={{ color: "#f4f6fb" }}
-                      formatter={(value: number, _name, item) =>
-                        item.payload.price === null ? ["brak danych", "Cena"] : [`${value.toFixed(2)} ${unitLabel}`, "Cena"]
-                      }
-                      labelFormatter={(_label, payload) => {
-                        const point = payload?.[0]?.payload as HourRow | undefined;
-                        return point ? `${point.dayLabel} ${point.hourLabel}` : "";
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) {
+                          return null;
+                        }
+
+                        const point = payload[0].payload as HourRow;
+                        return (
+                          <div className="chart-tooltip">
+                            <Text size="sm" fw={800} c="white">
+                              {point.dayLabel} {point.hourLabel}
+                            </Text>
+                            <Text size="sm" c={point.price === null ? "gray.4" : "white"}>
+                              {point.price === null ? "brak ceny" : `${point.price.toFixed(2)} ${unitLabel}`}
+                            </Text>
+                          </div>
+                        );
                       }}
                     />
                     <ReferenceLine x={23.5} stroke="rgba(255,255,255,0.45)" strokeDasharray="5 5" />

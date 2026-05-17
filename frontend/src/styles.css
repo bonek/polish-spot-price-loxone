@@ -79,6 +79,15 @@ body {
   position: relative;
 }
 
+.chart-tooltip {
+  min-width: 132px;
+  padding: 10px 12px;
+  background: #11151d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+
 .day-band {
   position: absolute;
   top: 8px;
