@@ -13,15 +13,22 @@ public sealed class HistoricalPriceCache
     };
 
     private readonly TgeRdnClient _client;
+    private readonly AzureSqlPriceStore _sqlStore;
     private readonly PriceOptions _options;
     private readonly ILogger<HistoricalPriceCache> _logger;
     private readonly string _cacheFile;
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private bool _sqlSeeded;
     private Dictionary<string, IReadOnlyList<HourlyPrice>> _pricesByDate = new(StringComparer.Ordinal);
 
-    public HistoricalPriceCache(TgeRdnClient client, IOptions<PriceOptions> options, ILogger<HistoricalPriceCache> logger)
+    public HistoricalPriceCache(
+        TgeRdnClient client,
+        AzureSqlPriceStore sqlStore,
+        IOptions<PriceOptions> options,
+        ILogger<HistoricalPriceCache> logger)
     {
         _client = client;
+        _sqlStore = sqlStore;
         _options = options.Value;
         _logger = logger;
         _cacheFile = CacheFilePaths.WritablePath(_options.HistoricalCacheFile);
@@ -44,10 +51,18 @@ public sealed class HistoricalPriceCache
                 return cached;
             }
 
+            var storedPrices = await _sqlStore.GetPricesAsync(date, cancellationToken);
+            if (storedPrices.Count > 0)
+            {
+                _pricesByDate[key] = storedPrices;
+                return storedPrices;
+            }
+
             try
             {
                 var prices = await _client.GetHistoricalHourlyPricesAsync(date, cancellationToken);
                 _pricesByDate[key] = prices;
+                await _sqlStore.SavePricesAsync(date, prices, cancellationToken);
                 SaveToDisk();
                 return prices;
             }
@@ -92,6 +107,7 @@ public sealed class HistoricalPriceCache
                 _pricesByDate[key] = prices;
                 refreshed++;
                 totalPrices += prices.Count;
+                await _sqlStore.SavePricesAsync(date, prices, cancellationToken);
                 SaveToDisk();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -153,6 +169,7 @@ public sealed class HistoricalPriceCache
                 .Where(price => DateOnly.FromDateTime(price.HourLocal.Date) == date)
                 .OrderBy(price => price.HourLocal)
                 .ToArray();
+            await _sqlStore.SavePricesAsync(date, _pricesByDate[date.ToString("yyyy-MM-dd")], cancellationToken);
             SaveToDisk();
         }
         finally
@@ -187,6 +204,17 @@ public sealed class HistoricalPriceCache
                 _logger.LogWarning(ex, "Could not read historical price cache file {CacheFile}.", cacheFile);
             }
         }
+    }
+
+    public Task SeedSqlAsync(CancellationToken cancellationToken)
+    {
+        if (_sqlSeeded)
+        {
+            return Task.CompletedTask;
+        }
+
+        _sqlSeeded = true;
+        return _sqlStore.SeedAsync(_pricesByDate, cancellationToken);
     }
 
     private void SaveToDisk()

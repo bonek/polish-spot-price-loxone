@@ -17,6 +17,7 @@ public sealed class HistoricalPriceRefreshWorker(HistoricalPriceCache historical
     {
         try
         {
+            await historicalCache.SeedSqlAsync(stoppingToken);
             var nowLocal = DateTimeOffset.Now.ToOffset(PriceCache.WarsawOffset());
             var today = DateOnly.FromDateTime(nowLocal.Date);
             await historicalCache.RefreshRangeFromExchangeAsync(today.AddDays(-1), today, stoppingToken);

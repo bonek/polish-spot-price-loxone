@@ -16,6 +16,7 @@ builder.Services.AddHttpClient<TgeRdnClient>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("PolishSpotPriceToLoxone/1.0");
 });
 builder.Services.AddSingleton<PriceCache>();
+builder.Services.AddSingleton<AzureSqlPriceStore>();
 builder.Services.AddSingleton<HistoricalPriceCache>();
 builder.Services.AddHostedService<PriceRefreshWorker>();
 builder.Services.AddHostedService<HistoricalPriceRefreshWorker>();
